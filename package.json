@@ -1,0 +1,36 @@
+{
+  "name": "react-get-post",
+  "version": "1.0.0",
+  "description": "A simple React hook for GETting and POSTing data",
+  "author": {
+    "name": "stagas",
+    "email": "gstagas@gmail.com",
+    "url": "https://github.com/stagas"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/stagas/react-get-post.git"
+  },
+  "keywords": [
+    "react",
+    "hook",
+    "get",
+    "post",
+    "fetch",
+    "api"
+  ],
+  "module": "dist/index.js",
+  "main": "dist/index.js",
+  "type": "module",
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "react": "^19.1.0",
+    "typescript": "^5"
+  }
+}
