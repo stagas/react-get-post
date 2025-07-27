@@ -24,6 +24,6 @@
     "noPropertyAccessFromIndexSignature": false
   },
   "include": [
-    "."
+    "index.ts"
   ]
 }

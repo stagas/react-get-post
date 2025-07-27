@@ -8,11 +8,11 @@ export const getter = (url: string) =>
     return res.json()
   })
 
-export const poster = (url: string, body: any) =>
+export const poster = (url: string, body?: any) =>
   fetch(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    body: body ? JSON.stringify(body) : null,
   }).then(res => {
     if (!res.ok) {
       throw new Error(

@@ -1,11 +1,29 @@
-import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
+import {
+  type Dispatch,
+  type SetStateAction,
+  useEffect,
+  useMemo,
+  useState,
+} from 'react'
 import { getter, poster } from './util'
 
-const getTriggerMap = new Map<string, () => Promise<void>>()
-const getSetDataMap = new Map<string, Dispatch<SetStateAction<any>>>()
-const getDataMap = new Map<string, unknown>()
-const getEpochMap = new Map<string, number>()
-const setEpochMap = new Map<string, number>()
+// Convert single Maps to double Maps: Map<instanceId, Map<url, value>>
+const getTriggerMap = new Map<string, Map<string, () => Promise<void>>>()
+const getSetDataMap = new Map<
+  string,
+  Map<string, Dispatch<SetStateAction<any>>>
+>()
+const getDataMap = new Map<string, Map<string, unknown>>()
+const getEpochMap = new Map<string, Map<string, number>>()
+const setEpochMap = new Map<string, Map<string, number>>()
+
+let globalIdCounter = 0
+
+function generateUniqueId(): string {
+  return `instance_${++globalIdCounter}_${Date.now()}_${
+    Math.random().toString(36).substr(2, 9)
+  }`
+}
 
 export function clearCache() {
   getTriggerMap.clear()
@@ -15,18 +33,70 @@ export function clearCache() {
   setEpochMap.clear()
 }
 
-function incrementGetEpoch(url: string) {
-  let epoch = getEpochMap.get(url) ?? 0
+function incrementGetEpoch(instanceId: string, url: string) {
+  if (!getEpochMap.has(instanceId)) {
+    getEpochMap.set(instanceId, new Map())
+  }
+  const instanceMap = getEpochMap.get(instanceId)!
+  let epoch = instanceMap.get(url) ?? 0
   epoch = epoch + 1
-  getEpochMap.set(url, epoch)
+  instanceMap.set(url, epoch)
   return epoch
 }
 
-function incrementSetEpoch(url: string) {
-  let epoch = setEpochMap.get(url) ?? 0
+function incrementSetEpoch(instanceId: string, url: string) {
+  if (!setEpochMap.has(instanceId)) {
+    setEpochMap.set(instanceId, new Map())
+  }
+  const instanceMap = setEpochMap.get(instanceId)!
+  let epoch = instanceMap.get(url) ?? 0
   epoch = epoch + 1
-  setEpochMap.set(url, epoch)
+  instanceMap.set(url, epoch)
   return epoch
+}
+
+function getFromDoubleMap<T>(
+  map: Map<string, Map<string, T>>,
+  instanceId: string,
+  url: string,
+): T | undefined {
+  return map.get(instanceId)?.get(url)
+}
+
+function setInDoubleMap<T>(
+  map: Map<string, Map<string, T>>,
+  instanceId: string,
+  url: string,
+  value: T,
+): void {
+  if (!map.has(instanceId)) {
+    map.set(instanceId, new Map())
+  }
+  map.get(instanceId)!.set(url, value)
+}
+
+function getAllFromUrl<T>(map: Map<string, Map<string, T>>, url: string): T[] {
+  const results: T[] = []
+  for (const instanceMap of map.values()) {
+    const value = instanceMap.get(url)
+    if (value !== undefined) {
+      results.push(value)
+    }
+  }
+  return results
+}
+
+function getAnyFromUrl<T>(
+  map: Map<string, Map<string, T>>,
+  url: string,
+): T | undefined {
+  for (const instanceMap of map.values()) {
+    const value = instanceMap.get(url)
+    if (value !== undefined) {
+      return value
+    }
+  }
+  return undefined
 }
 
 export interface GetOptions {
@@ -36,20 +106,24 @@ export interface GetOptions {
 }
 
 export function useGet<T>(url: string, options?: GetOptions) {
+  const instanceId = useMemo(() => generateUniqueId(), [])
+
   options ??= {}
   options.getter ??= getter
 
   if (options.query) {
     url = `${url}?${new URLSearchParams(options.query).toString()}`
   }
-  const [data, setData] = useState<T | null>(
-    (options.keepPreviousData ? (getDataMap.get(url) as T) : undefined) ?? null,
-  )
+
+  const previousData = options.keepPreviousData
+    ? getAnyFromUrl(getDataMap, url) as T
+    : undefined
+  const [data, setData] = useState<T | null>(previousData ?? null)
   const [isGetting, setIsGetting] = useState(!data)
   const [error, setError] = useState<Error | null>(null)
 
   const trigger = async () => {
-    const epoch = incrementGetEpoch(url)
+    const epoch = incrementGetEpoch(instanceId, url)
 
     if (!options.keepPreviousData) {
       setIsGetting(true)
@@ -58,15 +132,15 @@ export function useGet<T>(url: string, options?: GetOptions) {
     try {
       const result = await options.getter!(url)
 
-      if (getEpochMap.get(url) !== epoch) return
+      if (getFromDoubleMap(getEpochMap, instanceId, url) !== epoch) return
 
       setData(result)
-      getDataMap.set(url, result)
+      setInDoubleMap(getDataMap, instanceId, url, result)
       setError(null)
       setIsGetting(false)
     }
     catch (error) {
-      if (getEpochMap.get(url) !== epoch) return
+      if (getFromDoubleMap(getEpochMap, instanceId, url) !== epoch) return
 
       setError(error as Error)
       setIsGetting(false)
@@ -77,8 +151,8 @@ export function useGet<T>(url: string, options?: GetOptions) {
     }
   }
 
-  getTriggerMap.set(url, trigger)
-  getSetDataMap.set(url, setData)
+  setInDoubleMap(getTriggerMap, instanceId, url, trigger)
+  setInDoubleMap(getSetDataMap, instanceId, url, setData)
 
   useEffect(() => {
     if (!data) {
@@ -93,7 +167,10 @@ export function triggerGet(url: string, options?: GetOptions) {
   if (options?.query) {
     url = `${url}?${new URLSearchParams(options.query).toString()}`
   }
-  getTriggerMap.get(url)?.()
+
+  // Trigger all instances for this URL
+  const triggers = getAllFromUrl(getTriggerMap, url)
+  triggers.forEach(trigger => trigger())
 }
 
 export interface PostOptions {
@@ -105,6 +182,8 @@ export interface PostOptions {
 }
 
 export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
+  const instanceId = useMemo(() => generateUniqueId(), [])
+
   options ??= {}
   options.poster ??= poster
 
@@ -112,8 +191,8 @@ export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
   const [isPosting, setIsPosting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const post = async (body: T, extraOptions?: PostOptions) => {
-    const epoch = incrementSetEpoch(url)
+  const post = async (body?: T, extraOptions?: PostOptions) => {
+    const epoch = incrementSetEpoch(instanceId, url)
 
     setIsPosting(true)
 
@@ -132,35 +211,56 @@ export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
     }
 
     if (opts.optimisticData) {
-      getSetDataMap.get(currentGetUrl)?.(opts.optimisticData)
+      // Apply optimistic data to all instances of this URL
+      const setDataFunctions = getAllFromUrl(getSetDataMap, currentGetUrl)
+      setDataFunctions.forEach(setDataFn => setDataFn(opts.optimisticData))
     }
 
     try {
       const result = await opts.poster!(currentUrl, body)
 
-      if (setEpochMap.get(url) !== epoch) return
+      if (getFromDoubleMap(setEpochMap, instanceId, url) !== epoch) return
 
       setData(result)
       setError(null)
       setIsPosting(false)
 
       if (opts.useResponseData) {
-        getSetDataMap.get(currentGetUrl)?.(result)
-        getDataMap.set(currentGetUrl, result)
+        // Update all instances with response data
+        const setDataFunctions = getAllFromUrl(getSetDataMap, currentGetUrl)
+        setDataFunctions.forEach(setDataFn => setDataFn(result))
+
+        // Update all data maps
+        for (const [instanceMapId] of getDataMap) {
+          setInDoubleMap(getDataMap, instanceMapId, currentGetUrl, result)
+        }
       }
       else {
-        getTriggerMap.get(currentGetUrl)?.()
+        // Trigger all instances for this URL
+        const triggers = getAllFromUrl(getTriggerMap, currentGetUrl)
+        triggers.forEach(trigger => trigger())
       }
     }
     catch (error) {
-      if (setEpochMap.get(url) !== epoch) return
+      if (getFromDoubleMap(setEpochMap, instanceId, url) !== epoch) return
 
       setError(error as Error)
       setIsPosting(false)
 
-      // rollback last saved data
+      // rollback last saved data for all instances
       if (opts.optimisticData) {
-        getSetDataMap.get(currentGetUrl)?.(getDataMap.get(currentGetUrl))
+        // Restore each instance to its own previous data
+        for (const [currentInstanceId, instanceMap] of getDataMap) {
+          const savedData = instanceMap.get(currentGetUrl)
+          const setDataFn = getFromDoubleMap(
+            getSetDataMap,
+            currentInstanceId,
+            currentGetUrl,
+          )
+          if (setDataFn && savedData !== undefined) {
+            setDataFn(savedData)
+          }
+        }
       }
     }
   }
