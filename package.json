@@ -30,6 +30,9 @@
     "dist",
     "README.md"
   ],
+  "scripts": {
+    "test": "bun test"
+  },
   "devDependencies": {
     "@testing-library/react": "^15.0.0",
     "@types/bun": "latest",
