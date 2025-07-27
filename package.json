@@ -1,6 +1,6 @@
 {
   "name": "react-get-post",
-  "version": "1.0.0",
+  "version": "1.0.2",
   "description": "A simple React hook for GETting and POSTing data",
   "author": {
     "name": "stagas",
@@ -31,7 +31,13 @@
     "README.md"
   ],
   "devDependencies": {
-    "@types/bun": "latest"
+    "@testing-library/react": "^15.0.0",
+    "@types/bun": "latest",
+    "@types/jsdom": "^21.1.7",
+    "@types/react": "^19.1.8",
+    "@types/react-dom": "^19.1.6",
+    "jsdom": "^26.1.0",
+    "react-dom": "^19.1.0"
   },
   "peerDependencies": {
     "react": "^19.1.0",

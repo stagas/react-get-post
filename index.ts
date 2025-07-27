@@ -1,11 +1,19 @@
 import { type Dispatch, type SetStateAction, useEffect, useState } from 'react'
-import { getter, poster } from './util.js'
+import { getter, poster } from './util'
 
 const getTriggerMap = new Map<string, () => Promise<void>>()
 const getSetDataMap = new Map<string, Dispatch<SetStateAction<any>>>()
 const getDataMap = new Map<string, unknown>()
 const getEpochMap = new Map<string, number>()
 const setEpochMap = new Map<string, number>()
+
+export function clearCache() {
+  getTriggerMap.clear()
+  getSetDataMap.clear()
+  getDataMap.clear()
+  getEpochMap.clear()
+  setEpochMap.clear()
+}
 
 function incrementGetEpoch(url: string) {
   let epoch = getEpochMap.get(url) ?? 0
@@ -35,7 +43,7 @@ export function useGet<T>(url: string, options?: GetOptions) {
     url = `${url}?${new URLSearchParams(options.query).toString()}`
   }
   const [data, setData] = useState<T | null>(
-    options.keepPreviousData ? getDataMap.get(url) as T : null,
+    (options.keepPreviousData ? (getDataMap.get(url) as T) : undefined) ?? null,
   )
   const [isGetting, setIsGetting] = useState(!data)
   const [error, setError] = useState<Error | null>(null)
