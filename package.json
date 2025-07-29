@@ -1,6 +1,6 @@
 {
   "name": "react-get-post",
-  "version": "2.0.3",
+  "version": "3.0.0",
   "description": "A simple React hook for GETting and POSTing data",
   "author": {
     "name": "stagas",
@@ -20,14 +20,20 @@
     "fetch",
     "api"
   ],
-  "module": "dist/index.js",
-  "main": "dist/index.js",
+  "module": "src/index.ts",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
   "type": "module",
   "exports": {
-    ".": "./dist/index.js"
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts",
+      "default": "./src/index.ts"
+    }
   },
   "files": [
-    "dist",
+    "src",
+    "LICENSE",
     "README.md"
   ],
   "scripts": {
