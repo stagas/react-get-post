@@ -111,7 +111,9 @@ describe('usePost', () => {
 
     await waitFor(() => expect(getResult.current.isGetting).toBe(false))
 
-    const { result } = renderHook(() => usePost('/items', '/items', { poster }))
+    const { result } = renderHook(() =>
+      usePost('/items', { poster, getUrl: '/items' })
+    )
 
     await act(async () => {
       await result.current.post({ name: 'New Item' })
@@ -130,7 +132,7 @@ describe('usePost', () => {
     const poster = async () => {
       throw new Error('Post failed')
     }
-    const { result } = renderHook(() => usePost('/post-error', '', { poster }))
+    const { result } = renderHook(() => usePost('/post-error', { poster }))
 
     await act(async () => {
       await result.current.post({ name: 'Test' })
@@ -156,9 +158,10 @@ describe('usePost', () => {
     await waitFor(() => expect(getResult.current.isGetting).toBe(false))
 
     const { result: postResult } = renderHook(() =>
-      usePost('/optimistic', '/optimistic', {
+      usePost('/optimistic', {
         poster,
-        optimisticData: (current: any) => [...current, optimisticData],
+        getUrl: '/optimistic',
+        optimisticData: (current: any) => [...(current || []), optimisticData],
       })
     )
 
@@ -181,8 +184,9 @@ describe('usePost', () => {
     await waitFor(() => expect(getResult.current.isGetting).toBe(false))
 
     const { result: postResult } = renderHook(() =>
-      usePost('/response-data', '/response-data', {
+      usePost('/response-data', {
         poster,
+        getUrl: '/response-data',
         useResponseData: true,
       })
     )

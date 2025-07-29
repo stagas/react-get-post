@@ -45,7 +45,7 @@ function UserProfile({ userId }: { userId: string }) {
 import { usePost } from 'react-get-post'
 
 function CreateUser() {
-  const { isPosting, error, post } = usePost<User>('/api/users', '/api/users')
+  const { isPosting, error, post } = usePost<Partial<User>, User>('/api/users', { getUrl: '/api/users' })
 
   const handleSubmit = async (userData: Partial<User>) => {
     await post(userData)
@@ -103,25 +103,25 @@ const { data, isGetting, error } = useGet<User[]>('/api/users', {
 })
 ```
 
-### `usePost<T>(url: string, getUrl: string, options?: PostOptions)`
+### `usePost<TRequest, TResponse>(url: string, options?: PostOptions<TRequest, TResponse>)`
 
 Hook for POST requests with optimistic updates and automatic data synchronization.
 
 #### Parameters
 
 - `url` - The endpoint URL to post to
-- `getUrl` - The GET endpoint to refresh/sync after successful POST
 - `options` - Optional configuration object
 
 #### Options
 
 ```typescript
-interface PostOptions {
-  poster?: (url: string, body: T) => Promise<any>  // Custom post function
-  query?: Record<string, string>                   // Query parameters for POST
-  getterQuery?: Record<string, string>             // Query parameters for GET refresh
-  optimisticData?: unknown | ((value: unknown) => unknown)  // Optimistic update data
-  useResponseData?: boolean                        // Use POST response for data update
+interface PostOptions<TRequest, TResponse> {
+  poster?: (url: string, body: TRequest) => Promise<TResponse>  // Custom post function
+  query?: Record<string, string>                                // Query parameters for POST
+  getUrl?: string                                               // The GET endpoint to refresh/sync after successful POST
+  getterQuery?: Record<string, string>                          // Query parameters for GET refresh
+  optimisticData?: TResponse | ((value: TResponse, request?: TRequest) => TResponse)  // Optimistic update data
+  useResponseData?: boolean                                     // Use POST response for data update
 }
 ```
 
@@ -129,17 +129,18 @@ interface PostOptions {
 
 ```typescript
 {
-  data: T | null                                    // Response data from POST
-  isPosting: boolean                               // Loading state
-  error: Error | null                              // Error state
-  post: (body: T, extraOptions?: PostOptions) => Promise<void>  // Post function
+  data: TResponse | null                                    // Response data from POST
+  isPosting: boolean                                       // Loading state
+  error: Error | null                                      // Error state
+  post: (body: TRequest, extraOptions?: PostOptions<TRequest, TResponse>) => Promise<void>  // Post function
 }
 ```
 
 #### Example with Optimistic Updates
 
 ```tsx
-const { post, isPosting } = usePost<User>('/api/users', '/api/users', {
+const { post, isPosting } = usePost<Partial<User>, User>('/api/users', {
+  getUrl: '/api/users',
   optimisticData: (users: User[]) => [...users, newUser],
   useResponseData: true
 })
@@ -182,7 +183,8 @@ const { data } = useGet('/api/protected', { getter: customGetter })
 ### Optimistic Updates with Rollback
 
 ```tsx
-const { post } = usePost<Todo>('/api/todos', '/api/todos', {
+const { post } = usePost<Partial<Todo>, Todo>('/api/todos', {
+  getUrl: '/api/todos',
   optimisticData: (todos: Todo[]) => [
     ...todos,
     { id: Date.now(), text: 'New todo', completed: false }
@@ -223,7 +225,7 @@ interface User {
 }
 
 const { data } = useGet<User>('/api/user/1')  // data is typed as User | null
-const { post } = usePost<Partial<User>>('/api/users', '/api/users')
+const { post } = usePost<Partial<User>, User>('/api/users', { getUrl: '/api/users' })
 ```
 
 ## Contributing

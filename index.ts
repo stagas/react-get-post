@@ -14,6 +14,7 @@ const getSetDataMap = new Map<
   Map<string, Dispatch<SetStateAction<any>>>
 >()
 const getDataMap = new Map<string, Map<string, unknown>>()
+const setDataMap = new Map<string, Map<string, unknown>>()
 const getEpochMap = new Map<string, Map<string, number>>()
 const setEpochMap = new Map<string, Map<string, number>>()
 
@@ -173,28 +174,35 @@ export function triggerGet(url: string, options?: GetOptions) {
   triggers.forEach(trigger => trigger())
 }
 
-export interface PostOptions {
+export interface PostOptions<TRequest, TResponse> {
   poster?: typeof poster
   query?: Record<string, string>
+  getUrl?: string
   getterQuery?: Record<string, string>
-  optimisticData?: unknown | ((value: unknown) => unknown)
+  optimisticData?:
+    | TResponse
+    | ((value: TResponse, request?: TRequest) => TResponse)
   useResponseData?: boolean
 }
 
-export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
+export function usePost<TRequest, TResponse>(
+  url: string,
+  options?: PostOptions<TRequest, TResponse>,
+) {
   const instanceId = useMemo(() => generateUniqueId(), [])
 
   options ??= {}
   options.poster ??= poster
 
-  const [data, setData] = useState<T | null>(null)
+  const [data, setData] = useState<TResponse | null>(null)
   const [isPosting, setIsPosting] = useState(false)
   const [error, setError] = useState<Error | null>(null)
 
-  const post = async (body?: T, extraOptions?: PostOptions) => {
+  const post = async (
+    body?: TRequest,
+    extraOptions?: PostOptions<TRequest, TResponse>,
+  ) => {
     const epoch = incrementSetEpoch(instanceId, url)
-
-    setIsPosting(true)
 
     const opts = Object.assign({}, options, extraOptions)
 
@@ -203,17 +211,29 @@ export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
       currentUrl = `${url}?${new URLSearchParams(opts.query).toString()}`
     }
 
-    let currentGetUrl = getUrl
-    if (opts.getterQuery) {
-      currentGetUrl = `${getUrl}?${
+    let currentGetUrl = opts.getUrl
+    if (opts.getUrl && opts.getterQuery) {
+      currentGetUrl = `${opts.getUrl}?${
         new URLSearchParams(opts.getterQuery).toString()
       }`
     }
 
     if (opts.optimisticData) {
-      // Apply optimistic data to all instances of this URL
-      const setDataFunctions = getAllFromUrl(getSetDataMap, currentGetUrl)
-      setDataFunctions.forEach(setDataFn => setDataFn(opts.optimisticData))
+      setData(value => {
+        if (typeof opts.optimisticData === 'function') {
+          // @ts-expect-error
+          return opts.optimisticData(value as TResponse, body as TRequest)
+        }
+        return opts.optimisticData
+      })
+      if (opts.getUrl) {
+        // Apply optimistic data to all instances of this URL
+        const setDataFunctions = getAllFromUrl(getSetDataMap, currentGetUrl)
+        setDataFunctions.forEach(setDataFn => setDataFn(opts.optimisticData))
+      }
+    }
+    else {
+      setIsPosting(true)
     }
 
     try {
@@ -222,8 +242,11 @@ export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
       if (getFromDoubleMap(setEpochMap, instanceId, url) !== epoch) return
 
       setData(result)
+      setInDoubleMap(setDataMap, instanceId, url, result)
       setError(null)
       setIsPosting(false)
+
+      if (!opts.getUrl) return
 
       if (opts.useResponseData) {
         // Update all instances with response data
@@ -249,16 +272,19 @@ export function usePost<T>(url: string, getUrl: string, options?: PostOptions) {
 
       // rollback last saved data for all instances
       if (opts.optimisticData) {
-        // Restore each instance to its own previous data
-        for (const [currentInstanceId, instanceMap] of getDataMap) {
-          const savedData = instanceMap.get(currentGetUrl)
-          const setDataFn = getFromDoubleMap(
-            getSetDataMap,
-            currentInstanceId,
-            currentGetUrl,
-          )
-          if (setDataFn && savedData !== undefined) {
-            setDataFn(savedData)
+        setData(getFromDoubleMap(setDataMap, instanceId, url) as TResponse)
+        if (opts.getUrl) {
+          // Restore each instance to its own previous data
+          for (const [currentInstanceId, instanceMap] of getDataMap) {
+            const savedData = instanceMap.get(currentGetUrl)
+            const setDataFn = getFromDoubleMap(
+              getSetDataMap,
+              currentInstanceId,
+              currentGetUrl,
+            )
+            if (setDataFn && savedData !== undefined) {
+              setDataFn(savedData)
+            }
           }
         }
       }
