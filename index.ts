@@ -181,7 +181,7 @@ export interface PostOptions<TRequest, TResponse> {
   getterQuery?: Record<string, string>
   optimisticData?:
     | TResponse
-    | ((value: TResponse, request?: TRequest) => TResponse)
+    | ((value: TResponse, request: TRequest) => TResponse)
   useResponseData?: boolean
 }
 
